@@ -1,43 +1,76 @@
+import sqlite3
+from pathlib import Path
 
-import aiosqlite
+DB_PATH = Path(__file__).resolve().parent / "users.db"
 
-DB_NAME = "valhalla.db"
-
-async def init_db():
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                tg_id INTEGER UNIQUE,
-                username TEXT,
-                game_nick TEXT,
+                user_id TEXT PRIMARY KEY,
+                nickname TEXT,
+                role TEXT,
                 game_id TEXT,
                 server TEXT,
-                roles TEXT,
-                status TEXT
+                extra TEXT
             )
-        ''')
-        await db.commit()
+        """)
+        conn.commit()
 
-async def add_user(tg_id, username, game_nick, game_id, server, roles):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''
-            INSERT INTO users (tg_id, username, game_nick, game_id, server, roles, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (tg_id, username, game_nick, game_id, server, ",".join(roles), 'pending'))
-        await db.commit()
+def get_user(user_id):
+    return get_user_data(user_id)
+    
+def is_registered(user_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (str(user_id),))
+        return cursor.fetchone() is not None
 
-async def user_exists(tg_id):
-    async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute('SELECT 1 FROM users WHERE tg_id = ?', (tg_id,))
-        return await cursor.fetchone() is not None
+def register_user(user_id, data):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO users (user_id, nickname, role, game_id, server, extra)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            str(user_id),
+            data.get("nickname"),
+            data.get("role"),
+            data.get("game_id"),
+            data.get("server"),
+            data.get("extra", "")
+        ))
+        conn.commit()
 
-async def get_user(tg_id):
-    async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute('SELECT * FROM users WHERE tg_id = ?', (tg_id,))
-        return await cursor.fetchone()
+def get_user_data(user_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE user_id = ?", (str(user_id),))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "user_id": row[0],
+                "nickname": row[1],
+                "role": row[2],
+                "game_id": row[3],
+                "server": row[4],
+                "extra": row[5],
+            }
+        return None
 
-async def delete_user(tg_id):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('DELETE FROM users WHERE tg_id = ?', (tg_id,))
-        await db.commit()
+def delete_user(user_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE user_id = ?", (str(user_id),))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def get_all_users():
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users")
+        rows = cursor.fetchall()
+        return [dict(zip(
+            ["user_id", "nickname", "role", "game_id", "server", "extra"], row
+        )) for row in rows]

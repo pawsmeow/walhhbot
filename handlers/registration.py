@@ -90,7 +90,7 @@ async def done_roles(callback: CallbackQuery, state: FSMContext):
     for admin_id in ADMINS:
         try:
             await callback.bot.send_message(
-                -1002722742760,
+                1336616957,
                 msg,
                 reply_markup=admin_decision_keyboard(callback.from_user.id),
                 parse_mode="Markdown"

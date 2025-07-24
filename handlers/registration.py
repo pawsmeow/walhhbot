@@ -58,9 +58,16 @@ async def select_roles(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(Form.roles, F.data == "roles_done")
 async def done_roles(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+
     if len(data["roles"]) < 1:
         await callback.answer("Выберите хотя бы одну роль", show_alert=True)
         return
+
+    if await user_exists(callback.from_user.id):
+        await callback.answer("Вы уже отправляли анкету.", show_alert=True)
+        await state.clear()
+        return
+
     await add_user(
         callback.from_user.id,
         callback.from_user.username,
@@ -69,16 +76,31 @@ async def done_roles(callback: CallbackQuery, state: FSMContext):
         data["server"],
         data["roles"]
     )
+
     msg = (
-        f"📝 Новая анкета:"
-        f"👤 @{callback.from_user.username}"
-        f"🎮 Ник: {data['nick']}"
-        f"🆔 ID: {data['game_id']}"
-        f"🌍 Сервер: {data['server']}"
-        f"🛡️ Роли: {', '.join(data['roles'])}"
+        f"📝 Новая анкета:\n"
+        f"👤 @{callback.from_user.username}\n"
+        f"🎮 Ник: {data['nick']}\n"
+        f"🆔 ID: {data['game_id']}\n"
+        f"🌍 Сервер: {data['server']}\n"
+        f"🛡️ Роли: {', '.join(data['roles'])}\n"
         f"🔗 [Профиль](tg://user?id={callback.from_user.id})"
     )
+
     for admin_id in ADMINS:
-        await callback.bot.send_message(admin_id, msg, reply_markup=admin_decision_keyboard(callback.from_user.id), parse_mode="Markdown")
-    await callback.message.edit_text("Ваша анкета отправлена на проверку администратору.")
+        try:
+            await callback.bot.send_message(
+                admin_id,
+                msg,
+                reply_markup=admin_decision_keyboard(callback.from_user.id),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            print(f"[!] Ошибка отправки админу {admin_id}: {e}")
+
+    try:
+        await callback.message.edit_text("✅ Ваша анкета отправлена на проверку администратору.")
+    except:
+        await callback.message.answer("✅ Ваша анкета отправлена на проверку администратору.")
+
     await state.clear()
